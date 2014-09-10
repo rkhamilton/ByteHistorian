@@ -23,30 +23,34 @@ ByteHistorian::ByteHistorian()
     _previousStartOfYear = makeTime(tm);
     _currentDayOfYear = calcDayOfYear(now());
 
+    // initialize todays high/low values with ones which will be replaced immediately
+	_yearsHighs[_currentDayOfYear] = 0;
+	_yearsLows[_currentDayOfYear] = 255;
+
 }
 
 void ByteHistorian::setMinValue(float x)
 {
-	_minValue = x;
+	_minPossibleValue = x;
 }
 
 void ByteHistorian::setMaxValue(float x)
 {
-	_maxValue = x;
+	_maxPossibleValue = x;
 }
 
 byte ByteHistorian::convertRawToByte(float x)
 {
-	const float stepsize = (_maxValue - _minValue) / 255;
-	float converted = (x - _minValue)/stepsize;
+	const float stepsize = (_maxPossibleValue - _minPossibleValue) / 255;
+	float converted = (x - _minPossibleValue)/stepsize;
 	byte output = byte(constrain(converted,0,255));
 	return output;
 }
 
 float ByteHistorian::convertByteToRaw(byte x)
 {
-	const float stepsize = (_maxValue - _minValue) / 255;
-	float output = float(x) * stepsize + _minValue;
+	const float stepsize = (_maxPossibleValue - _minPossibleValue) / 255;
+	float output = float(x) * stepsize + _minPossibleValue;
 	return output;
 }
 
@@ -57,16 +61,32 @@ void ByteHistorian::logValue(time_t t, float val)
 	//if it is now a different day of the year, take appropriate action
     if (_currentDayOfYear != calcDayOfYear(t))
     {
-        endTheDay();
+        // push today's values to yesterday and zero the days record for today
+        for(int ii = 0; ii < _samplesPerDay; ii++)
+        {
+            _yesterdaysValues[ii] = _todaysValues[ii];
+            _todaysValues[ii] = 0;
+        }
         // update the day of the year
         _currentDayOfYear = calcDayOfYear(t);
+        // reset the todaysHigh/Low values to the current value
+        _yearsHighs[_currentDayOfYear] = _todaysCurrentValue;
+        _yearsLows[_currentDayOfYear] = _todaysCurrentValue;
+
+        _currentSampleToday = 0;
     }
 
-	_todaysHigh = max(_todaysHigh,	_todaysCurrentValue);
-	_todaysLow	= min(_todaysLow,	_todaysCurrentValue);
+	_yearsHighs[_currentDayOfYear] = max(_yearsHighs[_currentDayOfYear],	_todaysCurrentValue);
+	_yearsLows[_currentDayOfYear] = max(_yearsLows[_currentDayOfYear],	_todaysCurrentValue);
+
+    _currentSampleToday = max(indexOfTimeToday(t),_currentSampleToday);
 
 	_todaysValues[indexOfTimeToday(t)] = _todaysCurrentValue;
+}
 
+void ByteHistorian::logValue(float val)
+{
+    logValue(now(),val);
 }
 
 float ByteHistorian::currentValue()
@@ -76,12 +96,12 @@ float ByteHistorian::currentValue()
 
 float ByteHistorian::todaysLow()
 {
-	return convertByteToRaw(_todaysLow);
+	return convertByteToRaw(_yearsLows[_currentDayOfYear]);
 }
 
 float ByteHistorian::todaysHigh()
 {
-	return convertByteToRaw(_todaysHigh);
+	return convertByteToRaw(_yearsHighs[_currentDayOfYear]);
 }
 
 inline unsigned int ByteHistorian::indexOfTimeToday(time_t t)
@@ -95,25 +115,8 @@ inline unsigned int ByteHistorian::calcDayOfYear(time_t t)
     int((now() - _previousStartOfYear) / SECS_PER_DAY);
 }
 
-void ByteHistorian::endTheDay()
-{
-    // TODO log the day's min/max
-    // reset the todaysHigh/Low values to the current value
-    _todaysHigh = _todaysCurrentValue;
-    _todaysLow = _todaysCurrentValue;
-    // push today's values to yesterday and zero the days record for today
-    for(int ii = 0; ii < _samplesPerDay; ii++)
-    {
-        _yesterdaysValues[ii] = _todaysValues[ii];
-        _todaysValues[ii] = 0;
-    }
-
-}
-
 void ByteHistorian::initializeHistoryArrays()
 {
-    // TODO replace this with reads from flash memory
-
     // initialize today's array of values
     for(int ii = 0; ii < _samplesPerDay; ii++)
     {
@@ -122,11 +125,64 @@ void ByteHistorian::initializeHistoryArrays()
     }
 
     // initialize year's array of values
-    for(int ii = 0; ii < LONG_HISTORY_STORAGE; ii++)
+    for(int ii = 0; ii < HISTORIAN_DAYS_TO_STORE; ii++)
     {
         _yearsLows[ii] = 0;
         _yearsHighs[ii] = 0;
     }
+}
+
+byte ByteHistorian::getLowForDayAsByte(unsigned int idx)
+{
+    // if a value is requested that's out of bounds, return the extrema
+    return _yearsLows[constrain(idx,0,_daysToStore)];
+}
+
+float ByteHistorian::getLowForDay(unsigned int idx)
+{
+    return convertByteToRaw(getLowForDayAsByte(idx));
+}
+
+byte ByteHistorian::getHighForDayAsByte(unsigned int idx)
+{
+    // if a value is requested that's out of bounds, return the extrema
+    return _yearsHighs[constrain(idx,0,_daysToStore)];
+}
+
+float ByteHistorian::getHighForDay(unsigned int idx)
+{
+    return convertByteToRaw(getHighForDayAsByte(idx));
+}
+
+byte ByteHistorian::setHighForDayAsByte(unsigned int dayOfYear, byte val)
+{
+    _yearsHighs[constrain(dayOfYear,0,_daysToStore)] = val;
+}
+
+byte ByteHistorian::setLowForDayAsByte(unsigned int dayOfYear, byte val)
+{
+    _yearsLows[constrain(dayOfYear,0,_daysToStore)] = val;
+
+}
+
+byte ByteHistorian::getTodaysValueAsByte(unsigned int idx)
+{
+    return _todaysValues[constrain(idx,0,_samplesPerDay)];
+}
+
+float ByteHistorian::getTodaysValue(unsigned int idx)
+{
+    return convertByteToRaw(getTodaysValue(idx));
+}
+
+byte ByteHistorian::getYesterdaysValueAsByte(unsigned int idx)
+{
+    return _todaysValues[constrain(idx,0,_samplesPerDay)];
+}
+
+float ByteHistorian::getYesterdaysValue(unsigned int idx)
+{
+    return convertByteToRaw(getYesterdaysValue(idx));
 }
 
 ByteHistorian byteHistorian;
