@@ -9,6 +9,7 @@
 #define _BYTEHISTORIAN_h
 
 #include <Time.h>
+class SPIFlash;
 
 #if defined(ARDUINO) && ARDUINO >= 100
 #include "Arduino.h"
@@ -40,6 +41,7 @@ class ByteHistorian
 		inline unsigned int indexOfTimeToday(time_t t);
         inline unsigned int calcDayOfYear(time_t t);
         void initializeHistoryArrays();
+        SPIFlash* flash;
 
     public:
         ByteHistorian();
@@ -62,7 +64,8 @@ class ByteHistorian
         float getTodaysValue(unsigned int idx);
         byte getYesterdaysValueAsByte(unsigned int idx);
         float getYesterdaysValue(unsigned int idx);
-};
+        unsigned int saveState(long startAddress);
+        void loadState(long startAddress);};
 
 extern ByteHistorian byteHistorian;
 

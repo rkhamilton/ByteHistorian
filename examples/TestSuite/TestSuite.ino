@@ -1,6 +1,9 @@
 #include <Time.h>
 #include <Streaming.h>
-#include <ByteHistorian.h>
+#include "ByteHistorian.h"
+#include "SPIFlash.h"
+#include <SPI.h>
+
 /*
  * TestSuite.ino
  *
@@ -17,7 +20,8 @@ void setup()
 
 	testCurrentValues();
 	testMinMax();
-
+    testYearLogging();
+    testSaveLoad();
 
 }
 
@@ -110,6 +114,35 @@ void testYearLogging()
     Serial << "High from day 365: " << (temperature.getHighForDay(365) == 50) << endl;
     Serial << "Low from day 367: " << (temperature.getLowForDay(367) == 0) << endl;
     Serial << "High from day 367: " << (temperature.getHighForDay(367) == 50) << endl;
+}
+
+void testSaveLoad()
+{
+    Serial << "Test: save/load simulated data" << endl;
+	ByteHistorian temperature;
+
+	temperature.setMinValue(minValue);
+	temperature.setMaxValue(maxValue);
+
+	// log a years worth of data
+    TimeElements tm;
+    tm.Year = 2014;
+    tm.Month = 9;
+    tm.Day = 9;
+    tm.Hour = 13;
+    tm.Minute = 5;
+    tm.Second = 23;
+    time_t logTime = makeTime(tm);
+
+    float valueToLog = 0;
+
+    while (logTime <= logTime + SECS_PER_YEAR)
+    {
+        // every 12 hours ramp the value from 0 to 50
+        valueToLog = (logTime % (SECS_PER_HOUR * 12)) / (SECS_PER_HOUR * 12) * 50;
+    	temperature.logValue(logTime,valueToLog);
+        logTime = logTime + 300; // try to log a value every five minutes
+    }
 
 
 

@@ -6,7 +6,7 @@
  */
 
 #include "ByteHistorian.h"
-
+#include "SPIFlash.h""
 
 ByteHistorian::ByteHistorian()
 {
@@ -27,6 +27,8 @@ ByteHistorian::ByteHistorian()
 	_yearsHighs[_currentDayOfYear] = 0;
 	_yearsLows[_currentDayOfYear] = 255;
 
+    flash = new SPIFlash(8);
+    flash->initialize();
 }
 
 void ByteHistorian::setMinValue(float x)
@@ -183,6 +185,48 @@ byte ByteHistorian::getYesterdaysValueAsByte(unsigned int idx)
 float ByteHistorian::getYesterdaysValue(unsigned int idx)
 {
     return convertByteToRaw(getYesterdaysValue(idx));
+}
+
+unsigned int ByteHistorian::saveState(long startAddress)
+{
+    long currentWriteAddress = startAddress;
+    // must erase flash chip before writing to it
+    // how many bytes do we need to store?
+    int totalBytes =    sizeof(_todaysValues) +
+                        sizeof(_yesterdaysValues) +
+                        sizeof(_yearsHighs) +
+                        sizeof(_yearsLows);
+
+    int num4KBlocks = ceil(totalBytes/4096);
+
+    for(int ii = 0; ii < num4KBlocks; ii++)
+    {
+        flash->blockErase4K(startAddress + ii*4096);
+    }
+
+    flash->writeBytes(currentWriteAddress, _todaysValues, sizeof(_todaysValues));
+    currentWriteAddress += sizeof(_todaysValues);
+
+    flash->writeBytes(currentWriteAddress, _yesterdaysValues, sizeof(_yesterdaysValues));
+    currentWriteAddress += sizeof(_yesterdaysValues);
+
+    flash->writeBytes(currentWriteAddress, _yearsHighs, sizeof(_yearsHighs));
+    currentWriteAddress += sizeof(_yearsHighs);
+
+    flash->writeBytes(currentWriteAddress, _yearsLows, sizeof(_yearsLows));
+    currentWriteAddress += sizeof(_yearsLows);
+
+    return num4KBlocks*4096; // number of bytes this method will overwrite
+ }
+
+void ByteHistorian::loadState(long startAddress)
+{
+    long currentReadAddress = startAddress;
+
+    flash->readBytes(currentReadAddress,_todaysValues,sizeof(_todaysValues));
+    flash->readBytes(currentReadAddress,_yesterdaysValues,sizeof(_yesterdaysValues));
+    flash->readBytes(currentReadAddress,_yearsHighs,sizeof(_yearsHighs));
+    flash->readBytes(currentReadAddress,_yearsLows,sizeof(_yearsLows));
 }
 
 ByteHistorian byteHistorian;
